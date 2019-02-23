@@ -6,8 +6,10 @@ import java.util.Hashtable;
 public class PuzzleBFS{
     public static int[] temp_array= new int[16];
     public static int[][] temp_table;
-    public static String temp_str;
+    public static long start_time, end_time;
+    public static String temp_str,solution_moves;
     public static String solution_str = "";
+
 
     public static boolean isGoal(String table){
         return solution_str.equals(table);
@@ -16,8 +18,9 @@ public class PuzzleBFS{
         int inversions = 0,tmp = 0;
         boolean bottom_even;
 
-        if( row == 1 || row == 3) bottom_even = true;
-        else bottom_even=false;
+        /*if( row == 1 || row == 3) bottom_even = true;
+        else bottom_even=false;*/
+        bottom_even= !(row%2==0);
 
         for(int i=0; i<16; i++){
             if(table[i]==0) continue;
@@ -33,11 +36,11 @@ public class PuzzleBFS{
     }
     public static String putPath(String s,int p){
         switch(p){
-            case 0:  s+=" I"; break;
-            case 1:  s+=" Up"; break;
-            case -1:  s+=" Down"; break;
-            case 2:  s+=" Left"; break;
-            case -2:  s+=" Right"; break;
+            case 0:  s+="PosInicial- "; break;
+            case 1:  s+="Up "; break;
+            case -1:  s+="Down "; break;
+            case 2:  s+="Left "; break;
+            case -2:  s+="Right "; break;
         }
         return s;
     }
@@ -48,6 +51,7 @@ public class PuzzleBFS{
             for(int j=0;j<4;j++){
                 temp_array[k]=tb[i][j];
                 temp_str+=temp_array[k];
+                k++;
             }
         }
         return;
@@ -57,13 +61,13 @@ public class PuzzleBFS{
         int r=t.getBlankRow(),c=t.getBlankCol();
         temp_table=t.getTable();
         switch(move){
-            case -1: //Move Blank Up (r-1)(c==)
+            case 1: //Move Blank Up (r-1)(c==)
                 if(!isValid(r-1,c)) return null;
                 temp_table[r][c]=temp_table[r-1][c];
                 temp_table[r-1][c]=0;
                 r--;
             break;
-            case 1: //Move Blank Down (r+1)(c==)
+            case -1: //Move Blank Down (r+1)(c==)
                 if(!isValid(r+1,c)) return null;
                 temp_table[r][c]=temp_table[r+1][c];
                 temp_table[r+1][c]=0;
@@ -74,45 +78,67 @@ public class PuzzleBFS{
                 temp_table[r][c]=temp_table[r][c-1];
                 temp_table[r][c-1]=0;
             break;
-            case 3: //Move Blank Right (r==)(c+1)
+            case -2: //Move Blank Right (r==)(c+1)
                 if(!isValid(r,c+1)) return null;
                 temp_table[r][c]=temp_table[r][c+1];
                 temp_table[r][c+1]=0;
             break;
         }
         makeArray(temp_table);
-        if(isGoal(temp_str)){ System.out.println("Goal finish"); System.exit(0);}
+        if(isGoal(temp_str)){
+            end_time = System.nanoTime();
+            solution_moves=putPath(h.get(t.getString())[0],move); //makes the final set of moves
+            solutionFound(t.getString(),h);
+            System.exit(0);
+        }
         if(h.containsKey(temp_str)) return null;
         if(!isSolvable(temp_array,r)) return null;
         Table ts = new Table(temp_array,move,temp_str); //new node created
         return ts;
     }
+    public static String[] makePath(String moves,String steps){
+        //[0]-sequence of moves
+        //[1]- number of steps taken
+        String[] path = new String[2];
+        path[0]=moves;
+        path[1]=Integer.parseInt(steps)+1+"";
+        return path;
+    }
     public static void tableBFS(Table initial){
         Hashtable<String,String[]> h = new Hashtable<>(); //Marker
         Queue<Table> q = new LinkedList<>();
-        String[] path = new String[2];
+        String tmp;
         Table t,son;
 
-        path[0]=putPath("",initial.getLastMove());
-        path[1]="Initial";
-        h.put(initial.getString(),path);
+        tmp=putPath("",initial.getLastMove());
+        h.put(initial.getString(),makePath(tmp,"-1"));
         q.add(initial);
+
         while(!q.isEmpty()){
             t=q.remove();
-            if (isGoal(t.getString())){System.out.println("Finish"); return;}
-            System.out.println(t.getString());
-            for(int i= -1; i<3; i++){
-                if(i == -1*t.getLastMove()) continue; //Simetric movement, not legal
+            for(int i= -2; i<3; i++){
+                if(i == -1*t.getLastMove() || i==0) continue; //Simetric movement, not legal
                 son= stepToTake(t,i,h);
                 if(!(son == null)){
                     //if null, is invalid movement, or not solvable or already existing
-                    path[0]=putPath(h.get(t.getString())[0], son.getLastMove());
-                    path[1]=t.getString();
+                    tmp=putPath(h.get(t.getString())[0], son.getLastMove());
+                    h.put(son.getString(),makePath(tmp,h.get(t.getString())[1]));
                     q.add(son);
                 }
             }
         }
         return;
+    }
+    public static void solutionFound(String parent,Hashtable<String,String[]> h){
+        int steps = Integer.parseInt(h.get(parent)[1]) +1;
+        long total_time= end_time - start_time;
+        double seconds = (double)total_time/ 1_000_000_000.0;
+        System.out.println("Solução encontrada:");
+        System.out.println("Número de movimentos: "+steps);
+        System.out.println("Movimentos:\n "+solution_moves);
+        System.out.println("Número de nós criados: "+h.size());
+        System.out.println("Tempo total BFS: "+seconds+" segundos");
+
     }
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
@@ -125,7 +151,7 @@ public class PuzzleBFS{
                 for(int j = 0; j<4; j++){
                     tmp = in.nextInt();
                     temp_array[k] = tmp;
-                    str += tmp + " ";
+                    str += tmp;
                     if(tmp == 0) blank_row = i;
                     k++;
                 }
@@ -133,16 +159,12 @@ public class PuzzleBFS{
         //Scan Final State Table
             for(int i = 0; i<16; i++){
                 tmp = in.nextInt();
-                solution_str += tmp + " ";
+                solution_str +=tmp;
             }
         //Tests
+        start_time = System.nanoTime();
         if(isGoal(str)){
-            //Open function to return:
-                //the number of moves to reach solution
-                //the sequence of moves
-                //the time consumed
-                //the number of nodes created
-                //the number of nodes used/in Hashtable
+            System.out.println("Solução óptima, tabelas iguais");
         }
         else{
             if(isSolvable(temp_array,blank_row)){
