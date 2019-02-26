@@ -3,11 +3,31 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Stack;
 import java.util.HashMap;
+import java.util.Comparator;
+import java.util.PriorityQueue;
+
+class PriorityNodes implements Comparable<PriorityNodes>{
+    Table t;
+    int heuristic_dist;
+    PriorityNodes(Table t, int heuristic_dist){
+        this.t=t; this.heuristic_dist=heuristic_dist;
+    }
+    public Table getTable(){return this.t;}
+    public int getDist(){return this.heuristic_dist;}
+    public int compareTo(PriorityNodes pn){
+        if(this.getDist()==pn.getDist())
+            return 0;
+        if(this.getDist()>pn.getDist())
+            return 1;
+        return -1;
+    }
+}
 
 public class Puzzle{
     public static int[] temp_array= new int[16];
+    public static int[][] final_state=new int[4][4];
     public static long start_time, end_time;
-    public static String solution_str = "";
+    public static String solution_str="";
 
     //Checkers (isGoalState/isSolvable/isValidMove)
         public static boolean isGoal(String table){return solution_str.equals(table);}
@@ -53,60 +73,90 @@ public class Puzzle{
             }return t;
         }
     //Heuristics for A* and Greedy
-
-    //Maker Table General(Makes a general verification, appliable for BFS/DFS/IDFS/A*/Greedy)
-        public static Table stepToTake(Table t, int move,HashMap<String,String[]> h){
-            //2-DFS
-            int r=t.getBlankRow(),c=t.getBlankCol();
-            int[][] temp_table=t.getTable();
-            switch(move){
-                case 1: //Move Blank Up (r-1)(c==)
-                    if(!isValid(r-1,c)) return null;
-                    temp_table[r][c]=temp_table[r-1][c];
-                    temp_table[r-1][c]=0;
-                    r--;
-                break;
-                case -1: //Move Blank Down (r+1)(c==)
-                    if(!isValid(r+1,c)) return null;
-                    temp_table[r][c]=temp_table[r+1][c];
-                    temp_table[r+1][c]=0;
-                    r++;
-                break;
-                case 2: //Move Blank Left (r==)(c-1)
-                    if(!isValid(r,c-1)) return null;
-                    temp_table[r][c]=temp_table[r][c-1];
-                    temp_table[r][c-1]=0;
-                break;
-                case -2: //Move Blank Right (r==)(c+1)
-                    if(!isValid(r,c+1)) return null;
-                    temp_table[r][c]=temp_table[r][c+1];
-                    temp_table[r][c+1]=0;
-                break;
+    public static int distHamming(Table tb){
+        int diffs=0;
+        int[][] table=tb.getTable();
+        for(int i=0;i<4;i++){
+            for(int j=0;j<4;j++){
+                if(table[i][j] != final_state[i][j])
+                    diffs++;
             }
-            String ts = makeArray(temp_table);
-            if(isGoal(ts)){
-                end_time = System.nanoTime();
-                ts=putPath(h.get(t.getString())[0],move); //makes the final set of moves
-                solutionFound(t.getString(),h,ts);
-            }
-            if(h.containsKey(t)){
-                /*if(method != 2) // for all methods but DFS/IDFS
-                    return null;
-                int in_hash_steps = Integer.parseInt(h.get(t.getString())[1]);//get number of steps
-                if(current_steps < in_hash_steps){
-                    //takes less steps to reach this configuration, when compared to the already existing one
-                    //the one in Hash will be removed
-                    h.remove(t.getString());
-                    Table tb = new Table(temp_array,move,ts);
-                    return tb;
-                }*/
-                return null;
-            }
-            Table tb = new Table(temp_array,move,ts); //new node created
-            temp_table=null;
-            return tb;
         }
+        return diffs;
+    }
+    public static int distManhattan(Table tb){
+        int[][] table=tb.getTable();
+        int r,c,manh=0;
+        for(int i=0;i<4;i++){
+            for(int j=0;j<4;j++){
+                if(!(table[i][j]==final_state[i][j])){
+                    outerloop:
+                        for(r=0;r<4;r++){
+                            for(c=0;c<4;c++){
+                                if(table[i][j]==final_state[i][j]){
+                                    manh+=Math.abs(i-r)+Math.abs(j-c);
+                                    break outerloop;
+                                }
+                            }
+                        }
+                }
+            }
+        }
+        return manh;
+    }
     //Search Methods
+        public static void tableGreedy(Table tb){}
+            
+        public static void tableAHamming(Table tb){
+            //Hamming heuristic
+            PriorityQueue<PriorityNodes> pq = new PriorityQueue<>();
+            HashMap<String,String[]> h = new HashMap<>();
+            PriorityNodes t;
+            t= new PriorityNodes(tb,distHamming(tb));
+            String ts=putPath("",tb.getLastMove());
+            h.put(tb.getString(),makePath(ts,"-1"));
+            pq.add(t);
+            while(!pq.isEmpty()){
+                t=pq.remove();
+                if(isGoal(t.getTable().getString())){
+                    end_time = System.nanoTime();
+                    solutionFound(Integer.parseInt(h.get(t.getTable().getString())[1])-1,h,h.get(t.getTable().getString())[0]);
+                }
+                for(Table son : t.getTable().getDescedents()){
+                    if(!(h.containsKey(son.getString()))){
+                        ts=putPath(h.get(t.getTable().getString())[0], son.getLastMove());
+                        h.put(son.getString(),makePath(ts,h.get(t.getTable().getString())[1]));
+                        t = new PriorityNodes(son,distHamming(son));
+                        pq.add(t);
+                    }
+                }
+            }
+        }
+        public static void tableAManhattan(Table tb){
+            PriorityQueue<PriorityNodes> pq = new PriorityQueue<>();
+            HashMap<String,String[]> h = new HashMap<>();
+            PriorityNodes t;
+            t= new PriorityNodes(tb,distManhattan(tb));
+            String ts=putPath("",tb.getLastMove());
+            h.put(tb.getString(),makePath(ts,"-1"));
+            pq.add(t);
+            while(!pq.isEmpty()){
+                t=pq.remove();
+                if(isGoal(t.getTable().getString())){
+                    end_time = System.nanoTime();
+                    solutionFound(Integer.parseInt(h.get(t.getTable().getString())[1])-1,h,h.get(t.getTable().getString())[0]);
+                }
+                for(Table son : t.getTable().getDescedents()){
+                    if(!(h.containsKey(son.getString()))){
+                        ts=putPath(h.get(t.getTable().getString())[0], son.getLastMove());
+                        h.put(son.getString(),makePath(ts,h.get(t.getTable().getString())[1]));
+                        t = new PriorityNodes(son,distManhattan(son));
+                        pq.add(t);
+                    }
+                }
+            }
+        }
+
         public static void tableIDFS(Table tb){
             //In theory we can reach the standart state in at least 80 moves, so that is our final limit
             for(int i=0;i<=80;i++)
@@ -122,28 +172,27 @@ public class Puzzle{
             //Hence, we already adapt the method to accommodate the IDFS implememtation
 
             HashMap<String,String[]> h = new HashMap<>(); //Marker for visited elements
-            HashMap<String,String> in_stack = new HashMap<>(); //Marker for nodes in Stack
+            HashMap<String,String[]> in_stack = new HashMap<>(); //Marker for nodes in Stack
             Stack<Table> stack = new Stack<>();
-            Table t,son;
+            Table t;
 
             String ts="PosInicial- "; //saves the sequence of moves for each node
-            h.put(tb.getString(),makePath(ts,"-1"));
             stack.push(tb);
-            in_stack.put(tb.getString(),null);
-            System.out.println("Limit:"+limit);
+            in_stack.put(tb.getString(),makePath(ts,"-1"));
             while(!stack.isEmpty()){
                 t=stack.pop();
+                h.put(t.getString(),in_stack.get(t.getString()));
                 in_stack.remove(t.getString()); //visited and in Stack
+                if(isGoal(t.getString())){
+                    end_time = System.nanoTime();
+                    solutionFound(Integer.parseInt(h.get(t.getString())[1])-1,h,h.get(t.getString())[0]);
+                }
                 //Depth and Limit Checker
-                    if(Integer.parseInt(h.get(t.getString())[1])>limit) continue;
-                for(int i= -2; i<3; i++){
-                    if(i == -1*t.getLastMove() || i==0) continue; //Simetric movement, not legal
-                    son= stepToTake(t,i,h);
-                    //if null, is invalid movement, or not solvable or already existing
-                    if(!(son == null) && !in_stack.containsKey(son.getString())){
+                    if(Integer.parseInt(h.get(t.getString())[1])==limit) continue;
+                for(Table son : t.getDescedents()){
+                    if(!(h.containsKey(son.getString())) && !(in_stack.containsKey(son.getString()))){
                         ts=putPath(h.get(t.getString())[0], son.getLastMove());
-                        h.put(son.getString(),makePath(ts,h.get(t.getString())[1]));
-                        in_stack.put(son.getString(),null);
+                        in_stack.put(son.getString(),makePath(ts,h.get(t.getString())[1]));
                         stack.push(son);
                     }
                 }
@@ -157,17 +206,19 @@ public class Puzzle{
         public static void tableBFS(Table initial){
             HashMap<String,String[]> h = new HashMap<>(); //Marker
             Queue<Table> q = new LinkedList<>();
-            Table t,son;
+            Table t;
             String ts=putPath("",initial.getLastMove());
             h.put(initial.getString(),makePath(ts,"-1"));
             q.add(initial);
             while(!q.isEmpty()){
                 t=q.remove();
-                for(int i= -2; i<3; i++){
-                    if(i == -1*t.getLastMove() || i==0) continue; //Simetric movement, not legal
-                    son= stepToTake(t,i,h);
-                    if(!(son == null)){
-                        //if null, is invalid movement, or not solvable or already existing
+                for(Table son : t.getDescedents()){
+                    if(isGoal(son.getString())){
+                        end_time = System.nanoTime();
+                        ts=putPath(h.get(t.getString())[0],son.getLastMove()); //makes the final set of moves
+                        solutionFound(Integer.parseInt(h.get(t.getString())[1]),h,ts);
+                    }
+                    if(!(h.containsKey(son.getString()))){
                         ts=putPath(h.get(t.getString())[0], son.getLastMove());
                         h.put(son.getString(),makePath(ts,h.get(t.getString())[1]));
                         q.add(son);
@@ -185,8 +236,8 @@ public class Puzzle{
     //----------------------------------
 
     //Only if Solution was Found
-        public static void solutionFound(String parent,HashMap<String,String[]> h,String moves){
-            int steps = Integer.parseInt(h.get(parent)[1]) +1;
+        public static void solutionFound(int t_steps,HashMap<String,String[]> h,String moves){
+            int steps = t_steps +1;
             long total_time= end_time - start_time;
             double seconds = (double)total_time/ 1_000_000_000.0;
             System.out.println("Solução encontrada:");
@@ -208,20 +259,23 @@ public class Puzzle{
             for(int i = 0; i<4; i++){
                 for(int j = 0; j<4; j++){
                     tmp = in.nextInt();
-                    temp_array[k] = tmp;
-                    str += tmp;
-                    if(tmp == 0) blank_row = i;
+                    if(tmp == 0) blank_row=i;
+                    temp_array[k]=tmp;
+                    str+=tmp;
                     k++;
                 }
             }
         //Scan Final State Table
             k=0;
-            for(int i = 0; i<16; i++){
-                tmp = in.nextInt();
-                solution_str +=tmp;
-                if(tmp == 0) br_f = i;
-                f[k]=tmp;
-                k++;
+            for(int i = 0; i<4; i++){
+                for(int j=0;j<4;j++){
+                    tmp = in.nextInt();
+                    if(tmp == 0) br_f = i;
+                    solution_str+=tmp;
+                    f[k]=tmp;
+                    final_state[i][j]=tmp;
+                    k++;
+                }
             }
         //Tests
         start_time = System.nanoTime();
@@ -246,7 +300,12 @@ public class Puzzle{
                 break;
                 case 2:
                     System.out.println("DFS:");
-                    System.out.println("O DFS sem limite de ciclo não termina :(");
+                    //System.out.println("O DFS sem limite de ciclo não termina :(");
+                    start_time=System.nanoTime();
+                    tableDFS(init,27);
+                    System.out.println("Solução não encontrada:");
+                    double sec = (double)(System.nanoTime()-start_time)/ 1_000_000_000.0;
+                    System.out.println("Tempo: "+sec+" segundos");
                 break;
                 case 3:
                     System.out.println("IDFS:");
