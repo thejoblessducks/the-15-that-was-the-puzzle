@@ -31,6 +31,7 @@ class PriorityNodes implements Comparable<PriorityNodes>{
 ------------------------------------------------------------------------------*/
 public class Puzzle{
     public static int[][] final_state=new int[4][4];
+    public static int size=0;
     public static long start_time, end_time;
     public static String solution_str="";
 
@@ -156,7 +157,9 @@ Search Methods: BFS/LDFS/IDFS/A*(Hamming/Manhattan)/Greedy(Hamming/Manhattan)
     public static void dfsVisit(Table t,HashMap<String,String[]> h,int limit){
         if(isGoal(t.getString())){
             end_time = System.nanoTime();
-            solutionFound(Integer.parseInt(h.get(t.getString())[1])-1,h,h.get(t.getString())[0]);
+            int steps=Integer.parseInt(h.get(t.getString())[1]);
+            solutionFound(steps,h,h.get(t.getString())[0]);
+            return;
         }
         if(Integer.parseInt(h.get(t.getString())[1])==limit){
             h.remove(t.getString()); return;
@@ -166,6 +169,8 @@ Search Methods: BFS/LDFS/IDFS/A*(Hamming/Manhattan)/Greedy(Hamming/Manhattan)
             if(!(h.containsKey(son.getString()))){
                 String ts=putPath(h.get(t.getString())[0], son.getLastMove()); //makes a move
                 h.put(son.getString(),makePath(ts,h.get(t.getString())[1])); //updates de sequence and puts in_stack
+                size=Math.max(size,h.size());
+                //System.out.print(Integer.parseInt(h.get(son.getString())[1])+" | ");
                 dfsVisit(son,h,limit);
             }
         }
@@ -175,14 +180,26 @@ Search Methods: BFS/LDFS/IDFS/A*(Hamming/Manhattan)/Greedy(Hamming/Manhattan)
     public static void tableDFS2(Table tb,int limit){
         HashMap<String,String[]> h = new HashMap<>();
         String ts = "PosInicial- "; //saves the sequence of moves for each node
-        h.put(tb.getString(),makePath(ts,"-1"));
 
+        h.put(tb.getString(),makePath(ts,"-1"));
+        size=Math.max(size,h.size());
+        
         for(Table t : tb.getDescedents()){
-            System.out.println(t.getString());
             ts=putPath(h.get(tb.getString())[0], t.getLastMove()); //makes a move
             h.put(t.getString(),makePath(ts,h.get(tb.getString())[1])); //updates de sequence and puts in_stack
+            size=Math.max(size,h.size());
+            if(isGoal(t.getString())){
+                end_time = System.nanoTime();
+                int steps=Integer.parseInt(h.get(t.getString())[1]);
+                solutionFound(steps,h,h.get(t.getString())[0]);
+                return;
+            }
+            //System.out.print(Integer.parseInt(h.get(t.getString())[1])+" | ");
             dfsVisit(t,h,limit);
         }
+        System.out.println(size);
+        h.remove(tb.getString());
+        return;
     }
     public static void tableDFS1(Table tb,int limit){//For IDFS
         //Without limit, method never ends-->OutOfMemmory
@@ -224,8 +241,8 @@ Search Methods: BFS/LDFS/IDFS/A*(Hamming/Manhattan)/Greedy(Hamming/Manhattan)
     }
     public static void tableIDFS(Table tb){
         //In theory we can reach the standart state in at least 80 moves, so that is our final limit
-        for(int i=0;i<=80;i++)
-            tableDFS1(tb,i);
+        for(int i=1;i<=80;i++)
+            tableDFS2(tb,i);
         return;
     }
     /*A*, uses a PQ to save the nodes, it uses as a weight for the PQ a function
@@ -428,7 +445,7 @@ Main Reader and Choice Functions
                 System.out.println("LDFS:");
                 //System.out.println("O DFS sem limite de ciclo não termina :(");
                 start_time=System.nanoTime();
-                tableDFS2(init,25);
+                tableDFS2(init,80);
                 System.out.println("Solução não encontrada:");
                 sec = (double)(System.nanoTime()-start_time)/ 1_000_000_000.0;
                 System.out.println("Tempo: "+sec+" segundos");
