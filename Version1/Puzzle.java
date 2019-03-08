@@ -8,17 +8,27 @@ import java.util.PriorityQueue;
 
 class PriorityNodes implements Comparable<PriorityNodes>{
     /*Class that creates a node to enter in a PriorityQueue
-    This class is composed by two values, the class Table and its heuristic distance
-    Heuristic distance can be either Manhattan distance or Hamming distance
+      Has 4 values:
+       -> A value of type Table representing the board configuration for this Node
+       -> An heuristic distance for the current configuration
+            (Heuristic distance can be either Manhattan distance or Hamming distance)
+       -> The number of steps used to reach this configuration
+       -> The sequence of moves to reach this configuration
     */
     Table t;
-    int heuristic_dist;
+    int heuristic_dist,steps; //heuristic_dist=g+h
+    String moves;
 
-    PriorityNodes(Table t, int heuristic_dist){
-        this.t=t; this.heuristic_dist=heuristic_dist;
+    PriorityNodes(Table t, int heuristic_dist,int steps, String moves){
+        this.t=new Table(t.getTable(),t.getLastMove());
+        this.heuristic_dist=heuristic_dist;
+        this.steps=steps;
+        this.moves=moves;
     }
     public Table getTable(){return this.t;}
     public int getDist(){return this.heuristic_dist;}
+    public int getSteps(){return this.steps;}
+    public String getMoves(){return this.moves;}
     public int compareTo(PriorityNodes pn){
         //Implementation of comparator to use with PQueue
         if(this.getDist()==pn.getDist()) return 0;
@@ -26,21 +36,35 @@ class PriorityNodes implements Comparable<PriorityNodes>{
         return -1;
     }
 }
+
+class HashNode{
+    //Class to be used has value of HashMaps
+    //Contains the moves and number of steps of the given key in HashMap
+    String moves;
+    int steps;
+    HashNode(String moves,int steps){
+        this.moves=moves;
+        this.steps=steps;
+    }
+    public String getMoves(){return moves;}
+    public int getSteps(){return steps;}
+}
 /*------------------------------------------------------------------------------
 15 Puzzle main Programm
 ------------------------------------------------------------------------------*/
 public class Puzzle{
-    public static int[][] final_state=new int[4][4];
-    public static int size=0;
+    public static int[][] final_state=new int[4][4]; //table of goal state
+    public static int size=0; //variable to keep track of hash size in dfs
     public static long start_time, end_time;
-    public static String solution_str="";
+    public static String solution_str=""; //string configuration of goal state
 
 
 /*------------------------------------------------------------------------------
-Auxiliar Functions: isGoalState/isSolvable/isValidMove/putPath/makePath
+Auxiliar Functions: isGoalState/isSolvable/putPath
 ------------------------------------------------------------------------------*/
     public static boolean isGoal(String table){
-        return solution_str.equals(table);
+        //tests if the given table string configuration is equal to the goal configuration
+        return table.equals(solution_str);
     }
     public static boolean isSolvable(int[] table, int row){
         /*An even table is solvable if:
@@ -58,11 +82,8 @@ Auxiliar Functions: isGoalState/isSolvable/isValidMove/putPath/makePath
             }
         }return (bottom_even) == (inversions %2 == 0);
     }
-    public static boolean isValid(int r,int c){
-        //Checks if the row and column are inside the table matrix
-        return (r<4 && r>=0) && (c<4 && c>=0);
-    }
     public static String putPath(String s,int p){
+        //officially creates/chooses the move to make
         switch(p){
             case 0:  s+="PosInicial- "; break;
             case 1:  s+="Up "; break;
@@ -71,14 +92,6 @@ Auxiliar Functions: isGoalState/isSolvable/isValidMove/putPath/makePath
             case -2:  s+="Right "; break;
         }return s;
     }
-    public static String[] makePath(String moves,String steps){
-        //[0]-sequence of moves
-        //[1]- number of steps taken
-        String[] path = new String[2];
-        path[0]=moves;
-        path[1]=Integer.parseInt(steps)+1+"";
-        return path;
-    }
 //------------------------------------------------------------------------------
 
 
@@ -86,7 +99,7 @@ Auxiliar Functions: isGoalState/isSolvable/isValidMove/putPath/makePath
 Heuristic Functions: Hamming distance and Manhattan distance
 ------------------------------------------------------------------------------*/
     public static int distHamming(Table tb){
-        //Calculates the total number of displaced cells
+        //Calculates the total number of missplaced cells
         int diffs=0;
         int[][] table=tb.getTable();
         for(int i=0;i<4;i++){
@@ -98,6 +111,8 @@ Heuristic Functions: Hamming distance and Manhattan distance
         return diffs;
     }
     public static int distManhattan(Table tb){
+        //calculates the distance of a cell to its goal location in goal table
+        //the distance is the (distance_in_row)+(distance_in_col)
         int[][] table=tb.getTable();
         int manh=0;
         for(int i=0;i<4;i++){
@@ -124,188 +139,142 @@ Heuristic Functions: Hamming distance and Manhattan distance
 Search Methods: BFS/LDFS/IDFS/A*(Hamming/Manhattan)/Greedy(Hamming/Manhattan)
 ------------------------------------------------------------------------------*/
     public static void tableBFS(Table initial){
-        HashMap<String,String[]> h = new HashMap<>(); //Marker for visited nodes
+        //Supported by queue, it will only expand level d, after expanding d-1
+        HashMap<String,HashNode> h = new HashMap<>(); //Marker for visited nodes
         Queue<Table> q = new LinkedList<>();
+        HashNode hn;
         Table t;
+        String s;
 
-        String ts=putPath("",initial.getLastMove());
-        h.put(initial.getString(),makePath(ts,"-1"));
+        hn=new HashNode("Initial-",0); //initialize the queue
+        h.put(initial.getString(),hn);
         q.add(initial);
         while(!q.isEmpty()){
             t=q.remove();
+            if(isGoal(t.getString())){
+                //can end
+                end_time = System.nanoTime();
+                solutionFoundUnInformed(h.get(t.getString()),h.size());
+            }
             for(Table son : t.getDescedents()){
-                if(isGoal(son.getString())){
-                    end_time = System.nanoTime();
-                    ts=putPath(h.get(t.getString())[0],son.getLastMove()); //makes the final set of moves
-                    int steps = Integer.parseInt(h.get(t.getString())[1]);
-                    solutionFound(steps,h,ts);
-                }
-                if(!(h.containsKey(son.getString()))){
-                    ts=putPath(h.get(t.getString())[0], son.getLastMove());
-                    h.put(son.getString(),makePath(ts,h.get(t.getString())[1]));
+                if(!(h.containsKey(son.getString()))){//new configuration found
+                    s=putPath(h.get(t.getString()).getMoves(),son.getLastMove());
+                    hn = new HashNode(s,h.get(t.getString()).getSteps()+1);
+                    h.put(son.getString(),hn);
                     q.add(son);
                 }
             }
         }
-        System.out.println("Solução não encontrada:");
-        System.out.println("Número de nós: "+h.size());
-        double sec = (double)(System.nanoTime()-start_time)/ 1_000_000_000.0;
-        System.out.println("Tempo: "+sec+" segundos");
-        return;
     }
-
-    public static void dfsVisit(Table t,HashMap<String,String[]> h,int limit){
-        if(isGoal(t.getString())){
-            end_time = System.nanoTime();
-            int steps=Integer.parseInt(h.get(t.getString())[1]);
-            solutionFound(steps,h,h.get(t.getString())[0]);
-            return;
-        }
-        if(Integer.parseInt(h.get(t.getString())[1])==limit){
-            h.remove(t.getString()); return;
-        }
+    public static void dfsVisit(Table t,HashMap<String,HashNode> h,int limit,String s,HashNode hn){
+        if(h.get(t.getString()).getSteps()==limit) return; //has reached the limit
         for(Table son : t.getDescedents()){
-            // System.out.println(son.getString());
-            if(!(h.containsKey(son.getString()))){
-                String ts=putPath(h.get(t.getString())[0], son.getLastMove()); //makes a move
-                h.put(son.getString(),makePath(ts,h.get(t.getString())[1])); //updates de sequence and puts in_stack
-                size=Math.max(size,h.size());
-                //System.out.print(Integer.parseInt(h.get(son.getString())[1])+" | ");
-                dfsVisit(son,h,limit);
-            }
-        }
-        h.remove(t.getString());
-        return;
-    }
-    public static void tableDFS2(Table tb,int limit){
-        HashMap<String,String[]> h = new HashMap<>();
-        String ts = "PosInicial- "; //saves the sequence of moves for each node
+            if(!(h.containsKey(son.getString()))){//new configuration
+                s=putPath(h.get(t.getString()).getMoves(), son.getLastMove());
+                hn=new HashNode(s,h.get(t.getString()).getSteps()+1);
+                h.put(son.getString(),hn); //adds to hash
 
-        h.put(tb.getString(),makePath(ts,"-1"));
-        size=Math.max(size,h.size());
-        
-        for(Table t : tb.getDescedents()){
-            ts=putPath(h.get(tb.getString())[0], t.getLastMove()); //makes a move
-            h.put(t.getString(),makePath(ts,h.get(tb.getString())[1])); //updates de sequence and puts in_stack
-            size=Math.max(size,h.size());
-            if(isGoal(t.getString())){
-                end_time = System.nanoTime();
-                int steps=Integer.parseInt(h.get(t.getString())[1]);
-                solutionFound(steps,h,h.get(t.getString())[0]);
-                return;
-            }
-            //System.out.print(Integer.parseInt(h.get(t.getString())[1])+" | ");
-            dfsVisit(t,h,limit);
-        }
-        System.out.println(size);
-        h.remove(tb.getString());
-        return;
-    }
-    public static void tableDFS1(Table tb,int limit){//For IDFS
-        //Without limit, method never ends-->OutOfMemmory
-        //Hence, we already adapt the method to accommodate the IDFS implememtation
-        HashMap<String,String[]> h = new HashMap<>(); //Marker for visited elements
-        HashMap<String,String[]> in_stack = new HashMap<>(); //Marker for nodes in Stack
-        Stack<Table> stack = new Stack<>();
-        Table t;
-
-        String ts = "PosInicial- "; //saves the sequence of moves for each node
-        stack.push(tb);
-        in_stack.put(tb.getString(),makePath(ts,"-1"));
-        while(!stack.isEmpty()){
-            t = stack.pop();
-            h.put(t.getString(),in_stack.get(t.getString()));
-            in_stack.remove(t.getString()); //visited and in Stack
-
-            if(isGoal(t.getString())){
-                end_time = System.nanoTime();
-                solutionFound(Integer.parseInt(h.get(t.getString())[1]),h,h.get(t.getString())[0]);
-            }
-            //Depth and Limit Checker
-            if(Integer.parseInt(h.get(t.getString())[1])==limit){
-                h.remove(t.getString()); continue;
-            }
-
-            for(Table son : t.getDescedents()){
-                if(!(h.containsKey(son.getString())) && !(in_stack.containsKey(son.getString()))){
-                    ts=putPath(h.get(t.getString())[0], son.getLastMove()); //makes a move
-                    in_stack.put(son.getString(),makePath(ts,h.get(t.getString())[1])); //updates de sequence and puts in_stack
-                    stack.push(son);
+                size=Math.max(size,h.size()); //utdates maximum hash size
+                if(isGoal(son.getString())){
+                    end_time = System.nanoTime();
+                    solutionFoundUnInformed(h.get(son.getString()),size);
                 }
+                dfsVisit(son,h,limit,s,hn);
+                h.remove(son.getString()); //all its children failed, it fails too
             }
         }
-        h.clear();
-        in_stack.clear();
-        stack.clear();
+        return;
+    }
+    public static void tableDFS(Table tb,int limit){
+        HashMap<String,HashNode> h = new HashMap<>();
+        HashNode hn;
+        String s = "Inicial- "; //saves the sequence of moves for each node
+
+        hn=new HashNode(s,0);
+        h.put(tb.getString(),hn);
+        size=Math.max(size,h.size());
+
+        dfsVisit(tb,h,limit,s,hn);
         return;
     }
     public static void tableIDFS(Table tb){
         //In theory we can reach the standart state in at least 80 moves, so that is our final limit
+        size=0;
         for(int i=1;i<=80;i++)
-            tableDFS2(tb,i);
+            tableDFS(tb,i);
+        size=0;
         return;
     }
     /*A*, uses a PQ to save the nodes, it uses as a weight for the PQ a function
       f(n)=g(n)+h(n):
        g(n) is the step
        h(n) is the heuristic distance-- doesn't underestimate the value
-      A* guarantees to always reach optimal solution*/
+      A* guarantees to always reach optimal solution
+    */
     public static void tableAHamming(Table tb){
-        //A* implememtation using Hamming heuristic
         PriorityQueue<PriorityNodes> pq = new PriorityQueue<>();
-        HashMap<String,String[]> h = new HashMap<>();
-        PriorityNodes t;
+        HashMap<String,HashNode> closed = new HashMap<>();
+        PriorityNodes pn,tmp_pn;
+        HashNode hn;
+        int f,g,h;
+        String s;
 
-        t = new PriorityNodes(tb,distHamming(tb));
-        pq.add(t);
+        g=0;
+        h=distHamming(tb);
+        f=g+h;
+        pn=new PriorityNodes(tb,f,g,"Initial-");
+        pq.add(pn);
 
-        String ts = putPath("",tb.getLastMove());
-        h.put(tb.getString(),makePath(ts,"-1"));
         while(!pq.isEmpty()){
-            t = pq.remove();
-            if(isGoal(t.getTable().getString())){
+            pn=pq.poll();
+            // in_pq.remove(pn.getTable().getString());
+            if(isGoal(pn.getTable().getString())){
                 end_time = System.nanoTime();
-                int steps = Integer.parseInt(h.get(t.getTable().getString())[1]);
-                solutionFound(steps,h,h.get(t.getTable().getString())[0]);
+                solutionFoundInformed(pn,pq.size());
             }
-            for(Table son : t.getTable().getDescedents()){
-                if(!(h.containsKey(son.getString()))){
-                    ts = putPath(h.get(t.getTable().getString())[0], son.getLastMove());
-                    h.put(son.getString(),makePath(ts,h.get(t.getTable().getString())[1]));
-
-                    int steps = Integer.parseInt(h.get(son.getString())[1]);
-                    t = new PriorityNodes(son,steps+distHamming(son));
-                    pq.add(t);
+            hn= new HashNode(pn.getMoves(),pn.getSteps());
+            closed.put(pn.getTable().getString(),hn);
+            for(Table son : pn.getTable().getDescedents()){
+                if(!closed.containsKey(son.getString())){
+                    g=pn.getSteps()+1;
+                    h=distHamming(son);
+                    f=g+h;
+                    s=putPath(pn.getMoves(),son.getLastMove());
+                    tmp_pn = new PriorityNodes(son,f,g,s);
+                    pq.add(tmp_pn);
                 }
             }
-        }return;
+        }
     }
     public static void tableAManhattan(Table tb){
         //A* implememtation using Manhattan heuristic
         PriorityQueue<PriorityNodes> pq = new PriorityQueue<>();
-        HashMap<String,String[]> h = new HashMap<>();
-        PriorityNodes t;
-
-        t = new PriorityNodes(tb,distManhattan(tb));
-        pq.add(t);
-
-        String ts = putPath("",tb.getLastMove());
-        h.put(tb.getString(),makePath(ts,"-1"));
+        HashMap<String,HashNode> closed = new HashMap<>();
+        PriorityNodes pn,tmp;
+        HashNode hn;
+        int f,g,h;
+        String s;
+        g=0;
+        h=distManhattan(tb);
+        f=g+h;
+        pn=new PriorityNodes(tb,f,g,"Initial-");
+        pq.add(pn);
         while(!pq.isEmpty()){
-            t = pq.remove();
-            if(isGoal(t.getTable().getString())){
+            pn = pq.poll();
+            if(isGoal(pn.getTable().getString())){
                 end_time = System.nanoTime();
-                int steps = Integer.parseInt(h.get(t.getTable().getString())[1]);
-                solutionFound(steps,h,h.get(t.getTable().getString())[0]);
+                solutionFoundInformed(pn,pq.size());
             }
-            for(Table son : t.getTable().getDescedents()){
-                if(!(h.containsKey(son.getString()))){
-                    ts = putPath(h.get(t.getTable().getString())[0], son.getLastMove());
-                    h.put(son.getString(),makePath(ts,h.get(t.getTable().getString())[1]));
-
-                    int steps = Integer.parseInt(h.get(son.getString())[1]);
-                    t = new PriorityNodes(son,steps+distManhattan(son));
-                    pq.add(t);
+            hn = new HashNode(pn.getMoves(),pn.getSteps());
+            closed.put(pn.getTable().getString(),hn);
+            for(Table son : pn.getTable().getDescedents()){
+                if(!(closed.containsKey(son.getString()))){
+                    g=pn.getSteps()+1;
+                    h=distManhattan(son);
+                    f=h+g;
+                    s=putPath(pn.getMoves(),son.getLastMove());
+                    tmp = new PriorityNodes(son,f,g,s);
+                    pq.add(tmp);
                 }
             }
         }return;
@@ -314,72 +283,88 @@ Search Methods: BFS/LDFS/IDFS/A*(Hamming/Manhattan)/Greedy(Hamming/Manhattan)
         //The greedy works almost as the A*, except, f(n)=h(n)
         //Hamming heuristic
         PriorityQueue<PriorityNodes> pq = new PriorityQueue<>();
-        HashMap<String,String[]> h = new HashMap<>();
-        PriorityNodes t;
-        t= new PriorityNodes(tb,distHamming(tb));
-        String ts=putPath("",tb.getLastMove());
-        h.put(tb.getString(),makePath(ts,"-1"));
-        pq.add(t);
+        HashMap<String,HashNode> closed = new HashMap<>();
+        PriorityNodes pn,tmp;
+        HashNode hn;
+        String s;
+        int h,g;
+        g=0;
+        h=distHamming(tb);
+        pn=new PriorityNodes(tb,h,g,"Initial-");
+        pq.add(pn);
         while(!pq.isEmpty()){
-            t=pq.remove();
-            if(isGoal(t.getTable().getString())){
+            pn=pq.poll();
+            if(isGoal(pn.getTable().getString())){
                 end_time = System.nanoTime();
-                int steps =Integer.parseInt(h.get(t.getTable().getString())[1]);
-                solutionFound(steps,h,h.get(t.getTable().getString())[0]);
+                solutionFoundInformed(pn,pq.size());
             }
-            for(Table son : t.getTable().getDescedents()){
-                if(!(h.containsKey(son.getString()))){
-                    ts=putPath(h.get(t.getTable().getString())[0], son.getLastMove());
-                    h.put(son.getString(),makePath(ts,h.get(t.getTable().getString())[1]));
-                    t = new PriorityNodes(son,distHamming(son));
-                    pq.add(t);
+            hn=new HashNode(pn.getMoves(),pn.getSteps());
+            closed.put(pn.getTable().getString(),hn);
+            for(Table son : pn.getTable().getDescedents()){
+                if(!closed.containsKey(son.getString())){
+                    g=pn.getSteps()+1;
+                    h=distHamming(son);
+                    s=putPath(pn.getMoves(),son.getLastMove());
+                    tmp=new PriorityNodes(son,h,g,s);
+                    pq.add(tmp);
                 }
             }
-        }return;
+        }
     }
     public static void tableGreedyManhattan(Table tb){
-        //Greedy implememtation using Manhattan heuristic
         PriorityQueue<PriorityNodes> pq = new PriorityQueue<>();
-        HashMap<String,String[]> h = new HashMap<>();
-        PriorityNodes t;
+        HashMap<String,HashNode> closed = new HashMap<>();
+        PriorityNodes pn,tmp;
+        HashNode hn;
+        String s;
+        int g,h;
 
-        t = new PriorityNodes(tb,distManhattan(tb));
-        pq.add(t);
-
-        String ts = putPath("",tb.getLastMove());
-        h.put(tb.getString(),makePath(ts,"-1"));
+        g=0;
+        h=distManhattan(tb);
+        pn=new PriorityNodes(tb,h,g,"Initial-");
+        pq.add(pn);
         while(!pq.isEmpty()){
-            t = pq.remove();
-            if(isGoal(t.getTable().getString())){
+            pn=pq.poll();
+            if(isGoal(pn.getTable().getString())){
                 end_time = System.nanoTime();
-                int steps = Integer.parseInt(h.get(t.getTable().getString())[1]);
-                solutionFound(steps,h,h.get(t.getTable().getString())[0]);
+                solutionFoundInformed(pn,pq.size());
             }
-            for(Table son : t.getTable().getDescedents()){
-                if(!(h.containsKey(son.getString()))){
-                    ts = putPath(h.get(t.getTable().getString())[0], son.getLastMove());
-                    h.put(son.getString(),makePath(ts,h.get(t.getTable().getString())[1]));
-
-                    t = new PriorityNodes(son,distManhattan(son));
-                    pq.add(t);
+            hn=new HashNode(pn.getMoves(),pn.getSteps());
+            closed.put(pn.getTable().getString(),hn);
+            for(Table son : pn.getTable().getDescedents()){
+                if(!closed.containsKey(son.getString())){
+                    g=pn.getSteps()+1;
+                    h=distManhattan(son);
+                    s=putPath(pn.getMoves(),son.getLastMove());
+                    tmp=new PriorityNodes(son,h,g,s);
+                    pq.add(tmp);
                 }
             }
-        }return;
+        }
     }
-//------------------------------------------------------------------------------
 
 
 /*------------------------------------------------------------------------------
 Soluction Function (will terminate all the programm)
 ------------------------------------------------------------------------------*/
-    public static void solutionFound(int t_steps,HashMap<String,String[]> h,String moves){
-        int steps = t_steps;
+    public static void solutionFoundInformed(PriorityNodes pn, int size){
+        //solution function for all Informed methods
         long total_time= end_time - start_time;
         double seconds = (double)total_time/ 1_000_000_000.0;
         System.out.println("Solução encontrada:");
-        System.out.println("Número de movimentos: "+steps);
-        System.out.println("Movimentos:\n "+moves);
-        System.out.println("Número de nós criados: "+h.size());
+        System.out.println("Número de movimentos: "+pn.getSteps());
+        System.out.println("Movimentos:\n "+pn.getMoves());
+        System.out.println("Número de nós criados: "+size);
+        System.out.println("Tempo total: "+seconds+" segundos");
+        System.exit(0);
+    }
+    public static void solutionFoundUnInformed(HashNode hn,int size){
+        long total_time= end_time - start_time;
+        double seconds = (double)total_time/ 1_000_000_000.0;
+        System.out.println("Solução encontrada:");
+        System.out.println("Número de movimentos: "+hn.getSteps());
+        System.out.println("Movimentos:\n "+hn.getMoves());
+        System.out.println("Número de nós criados: "+size);
         System.out.println("Tempo total: "+seconds+" segundos");
         System.exit(0);
     }
@@ -440,12 +425,17 @@ Main Reader and Choice Functions
                 System.out.println("\nBFS:");
                 start_time=System.nanoTime();
                 tableBFS(init);
+                System.out.println("Solução não encontrada:");
+                sec = (double)(System.nanoTime()-start_time)/ 1_000_000_000.0;
+                System.out.println("Tempo: "+sec+" segundos");
             break;
             case 2://LDFS
                 System.out.println("LDFS:");
                 //System.out.println("O DFS sem limite de ciclo não termina :(");
                 start_time=System.nanoTime();
-                tableDFS2(init,80);
+                size=0;
+                tableDFS(init,30);
+                size=0;
                 System.out.println("Solução não encontrada:");
                 sec = (double)(System.nanoTime()-start_time)/ 1_000_000_000.0;
                 System.out.println("Tempo: "+sec+" segundos");
