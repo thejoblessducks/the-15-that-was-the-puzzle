@@ -68,8 +68,8 @@ Auxiliar Functions: isGoalState/isSolvable/putPath
     }
     public static boolean isSolvable(int[] table, int row){
         /*An even table is solvable if:
-            a)the blank_row from bottom is even and #inversions is even
-            b)the blank_row from bottom is odd and #inversions is odd
+            a)the blank_row from bottom is odd and #inversions is even
+            b)the blank_row from bottom is odd and #inversions is even
             In general, (bottom_even) == (inversions %2 == 0)
         */
         int inversions = 0;
