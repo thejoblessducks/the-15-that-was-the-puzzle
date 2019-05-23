@@ -24,5 +24,6 @@ fazendo: java Puzzle < conf_.txt
         Javac 10.0.2
 
 Todos os ficheiros para este trabalho estão disponíveis em:
- https://github.com/eamorgado/ProjetoIA-15Puzzle.git
  https://github.com/thejoblessducks/the-15-that-was-the-puzzle.git
+ 
+ https://github.com/eamorgado/ProjetoIA-15Puzzle --Em caso de atualização, será feito neste repositório
